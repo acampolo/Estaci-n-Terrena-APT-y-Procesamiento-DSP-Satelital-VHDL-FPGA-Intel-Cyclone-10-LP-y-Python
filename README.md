@@ -1,78 +1,103 @@
-# Estación Terrena APT y Procesamiento DSP Satelital - VHDL - FPGA - Intel Cyclone 10 LP y Python
+# Estación Terrena APT y Procesamiento DSP Satelital - VHDL - FPGA Intel Cyclone 10 LP y Python
+
 ![Hardware](https://img.shields.io/badge/Hardware-Intel_Cyclone_10_LP-blue?style=for-the-badge&logo=intel)
+![Placa](https://img.shields.io/badge/Placa-StratoSky_FPGA-black?style=for-the-badge)
 ![VHDL](https://img.shields.io/badge/HDL-VHDL-orange?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Software-Python_3.10+-yellow?style=for-the-badge&logo=python)
 ![OpenCV](https://img.shields.io/badge/Vision-OpenCV-green?style=for-the-badge&logo=opencv)
 ![PyQt6](https://img.shields.io/badge/GUI-PyQt6-lightgrey?style=for-the-badge)
 
-> **Sistema embebido de teledetección satelital de grado instrumental basado en tecnología FPGA, demodulación analógica de amplitud y frecuencia, y procesamiento de imágenes asíncrono en Python.**
+> **Sistema embebido de teledetección satelital basado en una FPGA, con demodulación de amplitud y procesamiento de imágenes en Python.**
 
-Este proyecto documenta el diseño, la construcción y la validación de una estación terrena regida por la directriz mecatrónica VDI 2206. A diferencia de las plataformas SDR tradicionales que sufren cuellos de botella debido a la latencia propia del sistema operativo, este ecosistema traslada el cómputo DSP pesado, es decir, la extracción de envolvente y los filtros FIR, directamente al silicio reconfigurable de una matriz FPGA. De este modo, la PC se libera de esa carga computacional y asume únicamente las tareas asíncronas de renderizado visual, además del filtrado espacial apoyado en algoritmos de visión artificial.
+En este proyecto diseñé, construí y validé yo solo una estación terrena, siguiendo la guía de diseño mecatrónico VDI 2206. En una plataforma SDR normal, el procesamiento de señal corre en la PC y depende de la latencia del sistema operativo. Aquí hice lo contrario: el trabajo pesado de DSP (la extracción de envolvente y los filtros FIR) lo hace la FPGA. La PC solo se encarga de mostrar la imagen y de aplicarle filtros de visión artificial.
+
+La FPGA que usé es la de la placa **StratoSky FPGA** (Proyecto Estratósfera, Cápsula Electrónica), que lleva una Intel Cyclone 10 LP `10CL080YU484I7G`.
 
 ---
 
 ## 📋 Tabla de Contenidos
 1. [Características Principales](#-características-principales)
-2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
-3. [Diseño de Hardware y Radiofrecuencia](#-diseño-de-hardware-y-radiofrecuencia)
-4. [Firmware DSP en FPGA - VHDL](#-firmware-dsp-en-fpga---vhdl)
-5. [Software de Estación Terrena - Python](#-software-de-estación-terrena---python)
-6. [Resultados y Consumo de Recursos](#-resultados-y-consumo-de-recursos)
-7. [Autores](#-autores)
+2. [Plataforma: Placa StratoSky FPGA](#-plataforma-placa-stratosky-fpga)
+3. [Arquitectura del Sistema](#-arquitectura-del-sistema)
+4. [Diseño de Hardware y Radiofrecuencia](#-diseño-de-hardware-y-radiofrecuencia)
+5. [Firmware DSP en FPGA - VHDL](#-firmware-dsp-en-fpga---vhdl)
+6. [Software de Estación Terrena - Python](#-software-de-estación-terrena---python)
+7. [Resultados y Consumo de Recursos](#-resultados-y-consumo-de-recursos)
+8. [Autor](#-autor)
 
 ---
 
 ## 🚀 Características Principales
 
-- **RF VHF Estabilizado**: Implementa un acondicionamiento analógico activo junto con una conmutación automática de transmisión conocida como PTT para transceptores SA828 sintonizados a 145.5 MHz.
-- **Demodulación AM en Silicio**: Desarrolla la Transformada de Hilbert estructurada como un filtro FIR en lenguaje VHDL, de forma que la extracción de envolvente emplea la aproximación matemática $\alpha$-max $\beta$-min para lograr una latencia casi nula.
-- **Sincronización por Contraste Dinámico**: Incorpora un algoritmo a nivel de hardware que es totalmente inmune al desvanecimiento de señal, conocido en telecomunicaciones como fading, así como al ruido impulsivo, operando a una tasa constante de 48 kHz.
-- **Telemetría I2C Concurrente**: Ejecuta una fusión de los datos provenientes del barómetro MS5611, el acelerómetro ADXL345 y el sensor de clima SHT31, mostrando toda esta instrumentación localmente a través de una pantalla OLED SSD1306.
-- **Multiplexación UART a Alta Velocidad**: Cuenta con un transmisor asíncrono configurado a 921600 baudios que se encarga de despachar paquetes híbridos, los cuales están compuestos por video e instrumentación, empleando para ello una memoria FIFO asíncrona que evita cualquier colisión de datos.
-- **Visión Artificial Híbrida**: Dispone de una interfaz gráfica multi-hilo programada en PyQt6, gracias a la cual la matriz de 256x256 px que fluye a 2400 px/s se purifica en tiempo real usando un filtrado bilateral y una ecualización adaptativa CLAHE mediante la librería OpenCV.
+- **RF en VHF**: Armé el acondicionamiento analógico activo y una conmutación automática de transmisión (PTT) para dos módulos SA828 sintonizados a 145.5 MHz.
+- **Demodulación AM en la FPGA**: Implementé la Transformada de Hilbert como un filtro FIR en VHDL. La envolvente se calcula con la aproximación $\alpha$-max $\beta$-min, que evita raíces cuadradas y mantiene la latencia muy baja.
+- **Sincronización por contraste dinámico**: La sincronización de las líneas se hace dentro de la FPGA y resiste bien el desvanecimiento de la señal (fading) y el ruido impulsivo. Trabaja a una tasa constante de 48 kHz.
+- **Telemetría I2C**: Leo el barómetro MS5611, el acelerómetro ADXL345 y el sensor de temperatura y humedad SHT31, y muestro los datos en una pantalla OLED SSD1306.
+- **Multiplexación UART**: Un transmisor a 921600 baudios envía paquetes que mezclan video y telemetría. Uso una FIFO asíncrona para que los datos no choquen entre sí.
+- **Visión artificial**: La interfaz está hecha en PyQt6 con varios hilos. La imagen de 256x256 px, que llega a 2400 px/s, se limpia en tiempo real con un filtro bilateral y ecualización adaptativa CLAHE de OpenCV.
+
+---
+
+## 🧩 Plataforma: Placa StratoSky FPGA
+
+Todo el firmware corre en la placa StratoSky FPGA. Estas son las partes de la placa que usé o que me sirvieron para el proyecto:
+
+| Elemento | Detalle |
+| :--- | :--- |
+| **FPGA** | Intel Cyclone 10 LP `10CL080YU484I7G`: 81264 LEs, 2810880 bits de memoria embebida, 488 multiplicadores de 9 bits (244 bloques DSP) y 4 PLLs. |
+| **Reloj** | Oscilador externo de 50 MHz (pin G22), que es el reloj principal de todo el diseño. |
+| **Programación** | Programador Arrow USB-Blaster integrado, por el puerto USB Tipo-C. No necesité hardware externo. |
+| **UART** | A través del mismo USB Tipo-C aparece un puerto COM virtual (pines RX: J3, TX: J4, a 3.3 V). |
+| **Sensores en la placa** | SHT31 (I²C, dirección `0x44`), MS5611 (I²C `0x76`/`0x77` o SPI) y ADXL345 (I²C `0x53`/`0x1D` o SPI). También trae un ADC ADS1115 (I²C, `0x48`). |
+| **Memoria** | SDRAM Winbond W9825G6KH-6 de 256 Mbit (32 MB) y dos ranuras microSD. |
+| **Entradas y salidas** | 10 switches, 10 LEDs y 2 botones con pull-up. |
+| **Expansión** | Conectores GPIO1 (1×20), GPIO2 (2×20) y GPIO3 (2×9, pensado para cámara OV7670). |
+| **Alimentación** | 5 V por USB Tipo-C o por el header VIN (solo una fuente a la vez). |
+
+Los tres sensores ya vienen soldados en la placa, así que no tuve que cablearlos aparte. Lo que sí conecté desde los conectores de expansión fue el ADC de audio PCM1808 y la pantalla OLED.
 
 ---
 
 ## 📡 Arquitectura del Sistema
 
-El flujo de datos obedece un esquema de codiseño estricto entre el hardware y el software. Por un lado, el formato de la trama emula el estándar APT clásico pero se encuentra adaptado para microcontroladores, por lo que fija la subportadora acústica en 1800 Hz y la frecuencia de muestreo en 48 kHz.
+La trama imita el formato APT clásico, pero adaptado a este sistema: la subportadora acústica está en 1800 Hz y la frecuencia de muestreo es de 48 kHz.
 
-| Subsistema Lógico | Dominio de Reloj | Protocolo y Tasa | Función Asignada |
+| Subsistema | Dominio de Reloj | Protocolo y Tasa | Función |
 | :--- | :--- | :--- | :--- |
-| **Receptor I2S** | Reloj interno de 50 MHz sincronizado | 48 kHz a 24 bits | Captura acústica desde el ADC Delta-Sigma PCM1808. |
-| **Maestros I2C** | Reloj interno de 50 MHz | 400 kHz en Fast Mode | Recolección de variables inerciales y despliegue local en la pantalla OLED. |
-| **Transmisor UART** | Reloj interno de 50 MHz | 921600 baudios | Evacuación multiplexada asíncrona de datos hacia la computadora. |
-| **Visión OpenCV** | Escritorio procesado en la CPU Host | Refresco visual cada 50 ms | Filtrado fotográfico asíncrono de alta definición gestionado mediante hilos. |
+| **Receptor I2S** | Reloj interno de 50 MHz | 48 kHz a 24 bits | Captura el audio desde el ADC Delta-Sigma PCM1808. |
+| **Maestros I2C** | Reloj interno de 50 MHz | 400 kHz (Fast Mode) | Lee los sensores y muestra los datos en la pantalla OLED. |
+| **Transmisor UART** | Reloj interno de 50 MHz | 921600 baudios | Envía los datos multiplexados a la computadora. |
+| **Visión OpenCV** | CPU de la PC | Refresco cada 50 ms | Filtra la imagen en la PC, con hilos separados. |
 
 ---
 
 ## 🛠️ Diseño de Hardware y Radiofrecuencia
 
-El acondicionamiento físico de la señal eléctrica resulta un paso crítico para garantizar un espectro analógico limpio antes de que intervenga la digitalización de los datos.
+Antes de digitalizar, la señal analógica tiene que llegar lo más limpia posible, así que dediqué bastante tiempo al acondicionamiento.
 
 ### 1. Acondicionamiento Analógico
-- **Filtros Activos MCP6022:** Se seleccionaron estos amplificadores operacionales gracias a su gran ancho de banda de 10 MHz y a su bajo nivel de ruido estimado en 8.7 nV/√Hz. En la placa receptora, un arreglo paso banda en cascada acotado entre 106 Hz y 7234 Hz resguarda al ADC. En contraparte, en la placa emisora, un filtro paso altas se encarga de bloquear la corriente continua y proporciona una ganancia calculada de 3.2.
-- **Tierra Virtual:** Un divisor resistivo totalmente simétrico establece un voltaje de referencia de 1.65 V, de modo que la onda de audio de corriente alterna puede oscilar de manera segura sin rebasar el límite de alimentación establecido en 3.3 V.
-- **Conmutación Automática:** El sistema cuenta con un diodo Schottky SS14 que rectifica la señal de audio y procede a cargar un circuito pasivo cuya constante de tiempo es de 220.9 ms. Cuando este voltaje excede el umbral de disparo, se satura un transistor BC547, el cual lleva a tierra el pin de transmisión encendiendo la etapa de radiofrecuencia en tan solo 3.8 ms.
+- **Filtros activos con MCP6022:** Elegí estos amplificadores operacionales por su ancho de banda de 10 MHz y su bajo ruido (8.7 nV/√Hz). En la placa receptora puse un filtro paso banda en cascada entre 106 Hz y 7234 Hz para proteger el ADC. En la placa emisora usé un filtro paso altas que bloquea la corriente continua y da una ganancia de 3.2.
+- **Tierra virtual:** Un divisor resistivo simétrico genera una referencia de 1.65 V. Así la señal de audio puede oscilar sin pasarse de la alimentación de 3.3 V.
+- **Conmutación automática:** Un diodo Schottky SS14 rectifica la señal de audio y carga un circuito pasivo con una constante de tiempo de 220.9 ms. Cuando el voltaje supera el umbral, un transistor BC547 se satura y lleva a tierra el pin de transmisión, lo que enciende la etapa de RF en unos 3.8 ms.
 
 ### 2. Antenas y Transceptores
-- **Módulos SA828:** Estos componentes operan en la banda de radioaficionados de 2 metros, sintonizados específicamente en los 145.5 MHz. Cabe mencionar que los filtros de voz predeterminados y los tonos subaudibles CTCSS fueron desactivados mediante la herramienta de configuración NiceRF para así obtener un canal de audio completamente transparente a la modulación.
-- **Arreglo de Antenas:** Se instaló una antena monopolo omnidireccional de cuarto de onda para la emisión de la señal, mientras que para la recepción se utilizó un dipolo altamente direccional dispuesto en V con una apertura de 120 grados.
+- **Módulos SA828:** Trabajan en la banda de radioaficionados de 2 metros, sintonizados a 145.5 MHz. Con la herramienta de configuración de NiceRF desactivé los filtros de voz y los tonos subaudibles CTCSS, para que el canal de audio no altere la modulación.
+- **Antenas:** Para transmitir usé un monopolo omnidireccional de cuarto de onda. Para recibir usé un dipolo direccional en V con una apertura de 120 grados.
 
-> ⚠️ **Correcciones Físicas de Diseño tras el Ensamblaje:**
-> Durante el proceso de integración, descubrimos empíricamente que el pin de salida de potencia SPK del módulo SA828 estaba saturando catastróficamente los amplificadores debido a que entregaba hasta 2 W de fuerza. Para solucionar este inconveniente, realizamos un corte mecánico en la pista de cobre y creamos un puente físico dirigido hacia el pin VOL, el cual provee un nivel de línea adecuado. Paralelamente, agregamos una resistencia de montaje superficial tipo pull-down en el capacitor del detector de señal, con lo cual garantizamos que la energía se descargue velozmente al dar por finalizada la transmisión.
+> ⚠️ **Correcciones de diseño después del ensamblaje:**
+> Al integrar todo descubrí que la salida de potencia SPK del módulo SA828 saturaba los amplificadores, porque entregaba hasta 2 W. Corté la pista de cobre y la reemplacé con un puente hacia el pin VOL, que entrega un nivel de línea adecuado. Además, agregué una resistencia SMD pull-down en el capacitor del detector de señal, para que se descargue rápido cuando termina la transmisión.
 
 ---
 
 ## 🧠 Firmware DSP en FPGA - VHDL
 
-La estrategia para extraer la subportadora prescinde de los tradicionales osciladores controlados numéricamente, conocidos en la literatura técnica como NCO. En cambio, desarrolla un robusto cauce de procesamiento estructurado en 7 etapas y basado en la **Transformada de Hilbert**.
+Para extraer la subportadora no usé un oscilador controlado numéricamente (NCO). En su lugar armé un pipeline de 7 etapas basado en la **Transformada de Hilbert**.
 
-### Motor Matemático: Aproximación $\alpha$-max $\beta$-min
-Con el objetivo de evitar el desbordamiento numérico, y para no acaparar los bloques lógicos de la FPGA tratando de calcular raíces cuadradas complejas, la magnitud geométrica del vector bidimensional se obtiene empleando simples desplazamientos lógicos de bits.
+### Cálculo de magnitud: aproximación $\alpha$-max $\beta$-min
+Para evitar desbordamientos y no gastar lógica de la FPGA en raíces cuadradas, calculo la magnitud del vector con sumas y desplazamientos de bits.
 
 ```vhdl
--- ETAPA 5: Ordenamiento Lógico en Máximo y Mínimo
+-- ETAPA 5: Ordenar en máximo y mínimo
 if valid_pipe(4) = '1' then
     if abs_I > abs_Q then
         max_val <= abs_I; min_val <= abs_Q;
@@ -81,8 +106,8 @@ if valid_pipe(4) = '1' then
     end if;
 end if;
 
--- ETAPA 6: Aproximación de la Magnitud calculada como el Máximo más tres octavos
--- del Mínimo, empleando únicamente sumas y desplazamientos de registros
+-- ETAPA 6: Magnitud ≈ máximo + 3/8 del mínimo,
+-- usando solo sumas y desplazamientos de registros
 if valid_pipe(5) = '1' then
     mag_approx <= resize(max_val, 27) +
                   shift_right(resize(min_val, 27), 2) +
@@ -90,38 +115,36 @@ if valid_pipe(5) = '1' then
 end if;
 ```
 
-De esta manera, el filtro digital FIR de 15 coeficientes saca partido de los bloques multiplicadores DSP físicos alojados dentro de la FPGA. Con esto se asegura una latencia fija e inamovible de 145.8 µs, aportando a su vez un alto grado de respuesta determinista.
+El filtro FIR de 15 coeficientes usa los multiplicadores DSP que ya trae la FPGA. La latencia es fija, de 145.8 µs, y la respuesta es determinista.
 
 ### Multiplexor UART
-La telemetría recolectada por el bus I2C y los píxeles de la matriz de video confluyen directamente en el módulo multiplexor de paquetes. Una máquina de estados finitos es la responsable de arbitrar este intenso tráfico de red. Su funcionamiento radica en aprovechar los silencios acústicos correspondientes a los porches negros de la imagen para interrumpir momentáneamente el flujo de video, despachar en su lugar los bytes de aceleración y temperatura encapsulados con la cabecera hexadecimal fija compuesta por `0xA5` y `0x5A`, y finalmente retomar el envío de la fotografía.
+La telemetría de los sensores I2C y los píxeles de la imagen llegan al mismo módulo multiplexor, que controlo con una máquina de estados finitos. Aprovecho los porches negros de la imagen, que son los momentos sin señal útil, para pausar el video, enviar los bytes de aceleración y temperatura con una cabecera fija (`0xA5` y `0x5A`) y después seguir con la imagen.
 
 ---
 
 ## 💻 Software de Estación Terrena - Python
 
-El programa receptor se encuentra codificado en lenguaje Python, valiéndose del entorno de ventanas PyQt6. Para prevenir que el aluvión de datos a 921600 baudios bloquee la interfaz de usuario, se aisló la lectura continua del puerto serie derivándola a un hilo de trabajo en segundo plano mediante la clase `QThread`.
+El programa receptor está hecho en Python con PyQt6. Como a 921600 baudios llegan muchos datos y podrían congelar la interfaz, la lectura del puerto serie corre en un hilo aparte con `QThread`.
 
-### Pipeline de Visión Artificial con OpenCV
-El ruido impulsivo que subsiste a la recepción analógica del canal es mitigado aplicando un enfoque de procesamiento bidimensional que protege celosamente la topografía de la fotografía captada.
+### Procesamiento de imagen con OpenCV
+El ruido impulsivo que queda después de la recepción analógica lo reduzco con un procesamiento en dos dimensiones que trata de conservar los detalles de la imagen.
 
 ```python
 def processed_frame(self):
     img = self.frame.copy()
 
     if self.chk_median.isChecked():
-        # 1. Filtro Bilateral: suaviza la estática acumulada en el fondo a la vez que
-        # preserva la nitidez de los bordes finos de los continentes o la nubosidad.
+        # 1. Filtro bilateral: suaviza la estática del fondo
+        # y conserva los bordes de continentes y nubes.
         suavizado = cv2.bilateralFilter(img, d=5, sigmaColor=50, sigmaSpace=50)
 
-        # 2. Ecualización adaptativa de contraste CLAHE:
-        # ajusta los niveles de iluminación sobre cuadrículas de 8x8 píxeles
-        # para revelar detalles ocultos a nivel local.
+        # 2. CLAHE: ecualización adaptativa de contraste
+        # sobre cuadrículas de 8x8 píxeles, para resaltar detalles locales.
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
         self.filtered = clahe.apply(suavizado)
         img = self.filtered
     else:
-        # Sin filtros de visión artificial, se aplica un ajuste de contraste
-        # global mediante el cálculo de percentiles.
+        # Sin los filtros, ajusto el contraste global con percentiles.
         lo, hi = np.percentile(img, [2, 98])
         if hi > lo:
             img = np.clip((img.astype(np.float32) - lo) * (255.0 / (hi - lo)), 0, 255).astype(np.uint8)
@@ -130,23 +153,29 @@ def processed_frame(self):
     return np.ascontiguousarray((colored[:, :, :3] * 255).astype(np.uint8))
 ```
 
-### Fusión Continua de Telemetría
-El software de la estación recibe la encomienda de decodificar las ráfagas asíncronas y efectuar cálculos sobre las variables físicas en tiempo real. Como ejemplo de esto, al procesar de manera combinada los datos de presión y de temperatura, el script es capaz de calcular la densidad atmosférica del aire, representada mediante la variable $\rho$. A su vez, monitorea constantemente la lectura de aceleración y guarda un historial continuo para activar alertas preventivas por vibración en el panel de diagnóstico visual.
+### Telemetría en tiempo real
+El software decodifica los paquetes que llegan por el puerto serie y calcula variables físicas al momento. Por ejemplo, con la presión y la temperatura calcula la densidad del aire ($\rho$). También guarda un historial de la aceleración y muestra una alerta de vibración en el panel de diagnóstico.
 
 ---
 
 ## 📊 Resultados y Consumo de Recursos
 
-La decisión arquitectónica de reescribir desde cero el bloque matemático, esquivando las operaciones de división e instanciando en su lugar sumas de aproximación geométrica, tuvo como resultado directo un consumo de hardware extremadamente reducido en la placa lógica. Este bajo nivel de ocupación garantiza un gran margen operativo en caso de que en un futuro se requiera escalar la resolución fotográfica o añadir bloques de compresión algorítmica.
+Reescribí el bloque matemático desde cero y evité las divisiones, usando sumas de aproximación. Con eso la FPGA de la placa StratoSky queda con mucho espacio libre, que sirve si más adelante quiero subir la resolución de la imagen o agregar compresión.
 
-| Recurso en la FPGA Intel Cyclone 10 LP | Cantidad Física Utilizada | Módulo Principal Responsable de la Ocupación |
+| Recurso en la FPGA (10CL080YU484I7G) | Utilizado | Dónde se usa |
 | :--- | :--- | :--- |
-| **Elementos Lógicos (LE)** | 4765 de 81264 (6%) | Instancias de los controladores I2C junto a la máquina UART y la lógica combinacional central. |
-| **Multiplicadores Embebidos DSP de 9 bits** | 30 de 488 (6%) | Filtro matemático de Hilbert dedicado a la convolución apoyada en estos bloques especializados. |
-| **Memoria Interna RAM M9K** | 50624 bits en total | Bloques designados para la memoria FIFO asíncrona y la memoria de solo lectura de la pantalla OLED. |
-| **Pines de Entrada y Salida (E/S)** | 29 de 290 (10%) | Pines empleados por los relojes de audio, los terminales de sensores y el puerto de transmisión hacia la computadora. |
+| **Elementos lógicos (LE)** | 4765 de 81264 (6%) | Controladores I2C, máquina UART y lógica central. |
+| **Multiplicadores DSP de 9 bits** | 30 de 488 (6%) | Filtro de Hilbert (convolución). |
+| **Memoria embebida (M9K)** | 50624 de 2810880 bits (2%) | FIFO asíncrona y memoria de solo lectura de la pantalla OLED. |
+| **Pines de E/S** | 29 de 290 (10%) | Relojes de audio, sensores y puerto hacia la computadora. |
 
-### Validación Operativa de Laboratorio
-- **Análisis de Espectro de Radio con SDR++:** Se comprobó una emisión analógica nítida anclada en los 145.5 MHz, respetando estrictamente el ancho de banda de 12.5 kHz sin generar armónicos destructivos.
-- **Resiliencia de Datos frente al Ruido:** Se provocó un bombardeo eléctrico induciendo más de 5000 bytes de basura digital, ante lo cual el despachador lógico programado en la computadora demostró ser capaz de descartar el ruido y resincronizarse velozmente amparándose en la detección de las cabeceras hexadecimales y en la suma de comprobación XOR.
-- **Fidelidad y Estabilidad de Geometría Visual:** Las imágenes captadas empleando los patrones de calibración probaron conservar intacta su relación de aspecto original de 256x256 px, logrando evadir totalmente los cortes de fila gracias al alineamiento regido por el contraste dinámico implementado dentro de la FPGA.
+### Pruebas de laboratorio
+- **Espectro con SDR++:** La emisión se ve limpia en 145.5 MHz, dentro del ancho de banda de 12.5 kHz y sin armónicos importantes.
+- **Resistencia al ruido:** Inyecté más de 5000 bytes de basura digital. El programa de la PC descartó el ruido y se resincronizó rápido usando las cabeceras hexadecimales y la suma de comprobación XOR.
+- **Geometría de la imagen:** Con patrones de calibración, las imágenes mantuvieron su tamaño de 256x256 px y no hubo cortes de fila, gracias a la sincronización por contraste dinámico implementada en la FPGA.
+
+---
+
+## 👤 Autor
+
+- **Favio Alexander Campolo Ruiz** - Estudiante de Ingeniería Electrónica, Universidad Tecnológica del Perú.
